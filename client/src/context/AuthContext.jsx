@@ -1,95 +1,82 @@
-import React, { createContext, useState, useEffect, useContext } from 'react';
-
-const AuthContext = createContext();
-
-export const useAuth = () => useContext(AuthContext);
+import React, { useState } from "react";
+import { authAPI } from "../services/api";
+import { AuthContext } from "./auth-context";
 
 export const AuthProvider = ({ children }) => {
-    const [currentUser, setCurrentUser] = useState(null);
-    const [loading, setLoading] = useState(true);
+  const [currentUser, setCurrentUser] = useState(() => {
+    const token = localStorage.getItem("token");
+    const userJson = localStorage.getItem("user");
+    return token && userJson ? JSON.parse(userJson) : null;
+  });
 
-    useEffect(() => {
-        // Check local storage for an existing session on load
-        const userJson = localStorage.getItem('currentUser');
-        if (userJson) {
-            setCurrentUser(JSON.parse(userJson));
-        }
-        setLoading(false);
-    }, []);
+  const signup = async (name, email, password) => {
+    try {
+      const data = await authAPI.register(name, email, password);
 
-    const signup = async (name, email, password) => {
-        return new Promise((resolve, reject) => {
-            setTimeout(() => {
-                try {
-                    // Get existing users
-                    const usersJson = localStorage.getItem('users');
-                    const users = usersJson ? JSON.parse(usersJson) : [];
+      localStorage.setItem("token", data.token);
+      localStorage.setItem(
+        "user",
+        JSON.stringify({
+          id: data._id,
+          name: data.name,
+          email: data.email,
+        }),
+      );
 
-                    // Check if user already exists
-                    if (users.some(u => u.email === email)) {
-                        resolve({ success: false, message: 'Email already exists.' });
-                        return;
-                    }
+      setCurrentUser({
+        id: data._id,
+        name: data.name,
+        email: data.email,
+      });
 
-                    const newUser = {
-                        id: Date.now().toString(),
-                        name,
-                        email,
-                        password, // Storing raw password for local demo purposes only
-                        createdAt: new Date().toISOString()
-                    };
+      return { success: true, user: data };
+    } catch (error) {
+      const message =
+        error.response?.data?.message || "An error occurred during signup.";
+      return { success: false, message };
+    }
+  };
 
-                    // Save to 'database' (local storage)
-                    users.push(newUser);
-                    localStorage.setItem('users', JSON.stringify(users));
+  const login = async (email, password) => {
+    try {
+      const data = await authAPI.login(email, password);
 
-                    // Log them in immediately
-                    setCurrentUser(newUser);
-                    localStorage.setItem('currentUser', JSON.stringify(newUser));
+      localStorage.setItem("token", data.token);
+      localStorage.setItem(
+        "user",
+        JSON.stringify({
+          id: data._id,
+          name: data.name,
+          email: data.email,
+        }),
+      );
 
-                    resolve({ success: true, user: newUser });
-                } catch (error) {
-                    resolve({ success: false, message: 'An error occurred during signup.' });
-                }
-            }, 600); // Simulate network request
-        });
-    };
+      setCurrentUser({
+        id: data._id,
+        name: data.name,
+        email: data.email,
+      });
 
-    const login = async (email, password) => {
-        return new Promise((resolve) => {
-            setTimeout(() => {
-                const usersJson = localStorage.getItem('users');
-                const users = usersJson ? JSON.parse(usersJson) : [];
+      return { success: true, user: data };
+    } catch (error) {
+      const message =
+        error.response?.data?.message || "Invalid email or password.";
+      return { success: false, message };
+    }
+  };
 
-                const user = users.find(u => u.email === email && u.password === password);
+  const logout = () => {
+    setCurrentUser(null);
+    localStorage.removeItem("token");
+    localStorage.removeItem("user");
+  };
 
-                if (user) {
-                    setCurrentUser(user);
-                    localStorage.setItem('currentUser', JSON.stringify(user));
-                    resolve({ success: true, user });
-                } else {
-                    resolve({ success: false, message: 'Invalid email or password.' });
-                }
-            }, 600);
-        });
-    };
+  const value = {
+    currentUser,
+    signup,
+    login,
+    logout,
+  };
 
-    const logout = () => {
-        setCurrentUser(null);
-        localStorage.removeItem('currentUser');
-    };
-
-    const value = {
-        currentUser,
-        signup,
-        login,
-        logout,
-        loading
-    };
-
-    return (
-        <AuthContext.Provider value={value}>
-            {!loading && children}
-        </AuthContext.Provider>
-    );
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
